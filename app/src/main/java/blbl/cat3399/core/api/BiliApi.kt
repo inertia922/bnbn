@@ -1071,22 +1071,28 @@ object BiliApi {
         )
         val resolvedSeasonId = result.optLong("season_id").takeIf { it > 0 } ?: seasonId ?: 0L
         val metadataFollow = parsePgcFollowState(result.optJSONObject("user_status"))
-        // The season response usually already contains user_status.follow/follow_status.
-        // Only pay for the extra user/status request when the detail response omitted it.
+        // Do not trust a negative value from the season metadata: some seasons omit or zero
+        // the follow fields even when the account is following them. A positive metadata value
+        // is safe to use; otherwise ask the dedicated user/status endpoint.
         val isFollowed =
             when {
-                metadataFollow != null -> metadataFollow
                 !BiliClient.cookies.hasSessData() -> false
+                metadataFollow == true -> true
                 else -> {
                     try {
-                        pgcFollowState(resolvedSeasonId)
+                        pgcFollowState(resolvedSeasonId) ?: metadataFollow
                     } catch (t: Exception) {
                         if (t is CancellationException) throw t
                         AppLog.e(TAG, "PGC follow state failed seasonId=$resolvedSeasonId", t)
-                        null
+                        metadataFollow
                     }
                 }
             }
+        AppLog.i(
+            TAG,
+            "PGC follow state seasonId=$resolvedSeasonId loggedIn=${BiliClient.cookies.hasSessData()} " +
+                "metadata=$metadataFollow final=$isFollowed",
+        )
         return BangumiSeasonDetail(
             seasonId = resolvedSeasonId,
             title = result.optString("title", result.optString("season_title", "")),

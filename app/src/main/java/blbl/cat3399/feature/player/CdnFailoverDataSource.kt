@@ -47,8 +47,8 @@ internal class CdnFailoverState(
  */
 internal class CdnThroughputMonitor(
     private val thresholdBytesPerSecond: Long,
-    private val windowMs: Long = 2_000L,
-    private val idleResetMs: Long = 4_000L,
+    private val windowMs: Long = 4_000L,
+    private val idleResetMs: Long = 8_000L,
     private val slowWindowsToSwitch: Int = 2,
 ) {
     private var windowStartMs: Long = 0L
@@ -115,8 +115,8 @@ internal class CdnFailoverDataSource(
         CdnThroughputMonitor(
             thresholdBytesPerSecond =
                 when (state.kind) {
-                    DebugStreamKind.AUDIO -> 8_000L
-                    else -> 24_000L
+                    DebugStreamKind.AUDIO -> 4_000L
+                    else -> 16_000L
                 },
         )
     private val transferListeners = ArrayList<TransferListener>(2)

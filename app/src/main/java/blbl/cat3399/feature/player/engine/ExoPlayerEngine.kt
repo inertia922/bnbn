@@ -77,15 +77,17 @@ internal class ExoPlayerEngine(
             // duration-only 50s buffer can retain hundreds of MB and cause GC pressure/jank
             // on TV boxes with limited RAM.
             .setBufferDurationsMs(
-                /* minBufferMs = */ 15_000,
+                /* minBufferMs = */ 30_000,
                 /* maxBufferMs = */ 90_000,
-                /* bufferForPlaybackMs = */ 1_500,
-                /* bufferForPlaybackAfterRebufferMs = */ 3_000,
+                // Do not start (or resume) on a barely-full buffer: on a marginal Wi-Fi link
+                // 1.5s of lead time turns into "play a few seconds, buffer again" cycles.
+                /* bufferForPlaybackMs = */ 3_000,
+                /* bufferForPlaybackAfterRebufferMs = */ 5_000,
             )
             .setTargetBufferBytes(96 * 1024 * 1024)
             // Keep a short back buffer so in-buffer seek/replay does not discard media
             // that was just fetched, without holding the old 50s default in memory.
-            .setBackBuffer(20_000, true)
+            .setBackBuffer(30_000, true)
             .build()
     private val liveHlsPlaylistParserFactory: HlsPlaylistParserFactory =
         ExtXStartStrippingHlsPlaylistParserFactory(onPlaylistParsed = onLiveHlsDebugInfo)

@@ -19,6 +19,33 @@ import blbl.cat3399.core.util.Format
 import blbl.cat3399.databinding.ItemVideoCardBinding
 import kotlin.math.roundToInt
 
+private const val OWNER_NAME_MAX_DISPLAY_WIDTH = 12
+
+/**
+ * CJK/emoji count as two columns, Latin/digits as one. The card has an avatar and date on the
+ * same row, so a long uploader name would otherwise push the date out of the card.
+ */
+internal fun ellipsizeOwnerName(
+    raw: String,
+    maxDisplayWidth: Int = OWNER_NAME_MAX_DISPLAY_WIDTH,
+): String {
+    val name = raw.trim()
+    if (name.isEmpty()) return name
+    var width = 0
+    var end = 0
+    var i = 0
+    while (i < name.length) {
+        val codePoint = name.codePointAt(i)
+        val charWidth = if (codePoint >= 0x2E80) 2 else 1
+        if (width + charWidth > maxDisplayWidth) break
+        width += charWidth
+        i += Character.charCount(codePoint)
+        end = i
+    }
+    if (end >= name.length) return name
+    return name.substring(0, end).trimEnd() + "…"
+}
+
 class VideoCardAdapter(
     private val onClick: (VideoCard, Int) -> Unit,
     private val onLongClick: ((VideoCard, Int) -> Boolean)? = null,
@@ -314,14 +341,15 @@ class VideoCardAdapter(
             val ownerName = item.ownerName.trim()
             val ownerFace = item.ownerFace?.trim().orEmpty()
             val showOwner = !isEpisodeStyleCard && (ownerName.isNotBlank() || ownerFace.isNotBlank())
-            binding.llOwner.isVisible = showOwner
             binding.ivOwnerAvatar.isVisible = !isEpisodeStyleCard && ownerFace.isNotBlank()
             if (!isEpisodeStyleCard && ownerFace.isNotBlank()) {
                 ImageLoader.loadInto(binding.ivOwnerAvatar, ImageUrl.avatar(ownerFace))
             } else {
                 binding.ivOwnerAvatar.setImageDrawable(null)
             }
-            binding.tvSubtitle.text = ownerName
+            val displayOwnerName = ellipsizeOwnerName(ownerName)
+            binding.tvSubtitle.text = displayOwnerName
+            binding.tvSubtitle.contentDescription = ownerName.takeIf { it.isNotBlank() }
             binding.tvSubtitle.isVisible = !isEpisodeStyleCard && ownerName.isNotBlank()
 
             val pubDateText =
@@ -339,6 +367,7 @@ class VideoCardAdapter(
                 }.joinToString(" · ")
             binding.tvStats.text = statsText
             binding.tvStats.isVisible = !isEpisodeStyleCard && statsText.isNotBlank()
+            binding.llOwner.isVisible = !isEpisodeStyleCard && (showOwner || pubDateText.isNotBlank())
 
             // Stats and uploader now live below the title, matching the large-screen feed layout.
             binding.llStats.isVisible = false

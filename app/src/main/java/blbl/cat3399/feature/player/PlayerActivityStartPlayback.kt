@@ -205,6 +205,9 @@ internal fun PlayerActivity.resetPlaybackStateForNewMedia(
     subtitleItems = emptyList()
     lastAvailableQns = emptyList()
     lastAvailableAudioIds = emptyList()
+    recentRebufferAtMs.clear()
+    autoQualityDowngradeCount = 0
+    lastAutoQualityDowngradeAtMs = 0L
     session = session.copy(actualQn = 0)
     session = session.copy(actualAudioId = 0)
     currentViewDurationMs = null

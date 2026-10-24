@@ -352,7 +352,7 @@ class BangumiDetailActivity : BaseActivity() {
                     followActionJob?.isActive == true -> "处理中…"
                     isFollowed == null && loadJob?.isActive == true -> "查询追番状态中…"
                     isFollowed == null -> "重新获取追番状态"
-                    isFollowed == true -> if (isDramaArg) "取消追剧" else "取消追番"
+                    isFollowed == true -> if (isDramaArg) "已追剧" else "已追番"
                     else -> if (isDramaArg) "追剧" else "追番"
                 },
             secondaryActionEnabled = loadJob?.isActive != true && followActionJob?.isActive != true,
@@ -419,8 +419,8 @@ class BangumiDetailActivity : BaseActivity() {
             return
         }
 
-        // The button says "取消追番/取消追剧" when followed, so make the destructive action
-        // explicit instead of letting a second click on "已追番" silently toggle the state.
+        // Keep the button label as "已追番/已追剧" (a status), and make a click open an
+        // explicit cancel confirmation instead of silently toggling the follow state.
         val drama = isDramaArg
         AppPopup.confirm(
             context = this,

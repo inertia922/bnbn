@@ -274,6 +274,9 @@ class PlayerActivity : BaseActivity() {
     internal var subtitleLoadJob: Job? = null
     internal var lastAvailableQns: List<Int> = emptyList()
     internal var lastAvailableAudioIds: List<Int> = emptyList()
+    internal val recentRebufferAtMs = ArrayDeque<Long>()
+    internal var autoQualityDowngradeCount: Int = 0
+    internal var lastAutoQualityDowngradeAtMs: Long = 0L
     private var danmakuSegmentSizeMs: Int = DANMAKU_DEFAULT_SEGMENT_MS
     private var danmakuSegmentTotal: Int = 0
     internal var danmakuShield: DanmakuShield? = null
@@ -395,6 +398,34 @@ class PlayerActivity : BaseActivity() {
     private fun dismissPlaybackFailureDialog() {
         playbackErrorDialog?.dismiss()
         playbackErrorDialog = null
+    }
+
+    private fun maybeAutoDowngradeQualityOnRebuffer() {
+        if (!traceFirstFrameLogged || isPlayerTeardownInProgress()) return
+        if (scrubbing || keySeekPendingKeyCode != 0) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastAutoQualityDowngradeAtMs < AUTO_QUALITY_DOWNGRADE_COOLDOWN_MS) return
+
+        recentRebufferAtMs.addLast(now)
+        while (recentRebufferAtMs.isNotEmpty() && now - recentRebufferAtMs.first() > AUTO_QUALITY_REBUFFER_WINDOW_MS) {
+            recentRebufferAtMs.removeFirst()
+        }
+        if (recentRebufferAtMs.size < AUTO_QUALITY_REBUFFER_COUNT) return
+        if (autoQualityDowngradeCount >= AUTO_QUALITY_MAX_DOWNGRADES) return
+
+        val currentQn = selectedResolutionQn()
+        val lowerQn =
+            AUTO_QUALITY_FALLBACK_QNS.firstOrNull { candidate ->
+                candidate in lastAvailableQns && qnRank(candidate) < qnRank(currentQn)
+            } ?: return
+
+        recentRebufferAtMs.clear()
+        autoQualityDowngradeCount++
+        lastAutoQualityDowngradeAtMs = now
+        session = session.copy(targetQn = lowerQn)
+        trace?.log("player:autoDowngrade", "from=$currentQn to=$lowerQn count=$autoQualityDowngradeCount")
+        AppToast.show(this, "网络较慢，已自动切换到 ${qnLabel(lowerQn)}")
+        reloadStream(keepPosition = true, resetConstraints = false, autoPlay = true)
     }
 
     private fun exitTraceStart(trigger: String) {
@@ -1000,6 +1031,7 @@ class PlayerActivity : BaseActivity() {
                     if (playbackState == Player.STATE_READY) dismissPlaybackFailureDialog()
                     if (playbackState == Player.STATE_BUFFERING && debug.lastPlaybackState != Player.STATE_BUFFERING && engine.playWhenReady) {
                         debug.rebufferCount++
+                        maybeAutoDowngradeQualityOnRebuffer()
                     }
                     if (playbackState == Player.STATE_BUFFERING) {
                         bufferingOverlayController.onBufferingStarted(
@@ -3694,6 +3726,11 @@ class PlayerActivity : BaseActivity() {
         internal const val PLAYBACK_TITLE_HINT_HIDE_DELAY_MS = 2_500L
         internal const val AUTO_NEXT_PREVIEW_WINDOW_MS = 5_000L
         internal const val AUTO_NEXT_TITLE_MAX_CHARS = 18
+        private const val AUTO_QUALITY_REBUFFER_COUNT = 3
+        private const val AUTO_QUALITY_REBUFFER_WINDOW_MS = 40_000L
+        private const val AUTO_QUALITY_DOWNGRADE_COOLDOWN_MS = 20_000L
+        private const val AUTO_QUALITY_MAX_DOWNGRADES = 2
+        private val AUTO_QUALITY_FALLBACK_QNS = listOf(80, 64, 32, 16)
         internal const val SEEK_OSD_HIDE_DELAY_MS = 1_500L
         internal const val VIDEOSHOT_PREVIEW_HIDE_AFTER_SEEK_MS = 500L
         internal const val AUTO_SKIP_START_WINDOW_MS = 1_000L

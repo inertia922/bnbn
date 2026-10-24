@@ -2,12 +2,9 @@ package blbl.cat3399.feature.video
 
 import android.content.Intent
 import android.os.Bundle
-import android.view.Gravity
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
-import android.widget.FrameLayout
-import android.widget.ProgressBar
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.GridLayoutManager
@@ -26,7 +23,6 @@ import blbl.cat3399.core.ui.BaseActivity
 import blbl.cat3399.core.ui.GridSpanPolicy
 import blbl.cat3399.core.ui.Immersive
 import blbl.cat3399.core.ui.dispatchToDpadItemKeyHandler
-import blbl.cat3399.core.ui.ThemeColor
 import blbl.cat3399.core.ui.cloneInUserScale
 import blbl.cat3399.core.ui.requestFocusAdapterPositionReliable
 import blbl.cat3399.core.ui.smoothScrollToPositionStart
@@ -141,45 +137,11 @@ class VideoDetailActivity : BaseActivity() {
             return
         }
 
-        if (savedInstanceState != null) {
-            initUi()
-            load()
-            return
-        }
-
-        showLoadingUi()
-        Immersive.apply(this, BiliClient.prefs.fullscreenEnabled)
-
-        lifecycleScope.launch {
-            try {
-                val detail = fetchVideoDetail()
-                val bangumiRedirect = parseBangumiRedirectUrl(detail.redirectUrl.orEmpty())
-                if (bangumiRedirect != null) {
-                    startActivity(
-                        Intent(this@VideoDetailActivity, BangumiDetailActivity::class.java)
-                            .putExtra(BangumiDetailActivity.EXTRA_IS_DRAMA, false)
-                            .apply {
-                                bangumiRedirect.epId?.let { epId ->
-                                    putExtra(BangumiDetailActivity.EXTRA_EP_ID, epId)
-                                    putExtra(BangumiDetailActivity.EXTRA_CONTINUE_EP_ID, epId)
-                                }
-                                bangumiRedirect.seasonId?.let { seasonId ->
-                                    putExtra(BangumiDetailActivity.EXTRA_SEASON_ID, seasonId)
-                                }
-                            },
-                    )
-                    finish()
-                    return@launch
-                }
-
-                initUi()
-                load(prefetchedDetail = detail)
-            } catch (t: Throwable) {
-                if (t is CancellationException) return@launch
-                AppToast.show(this@VideoDetailActivity, t.message ?: "加载失败")
-                finish()
-            }
-        }
+        // Show the real page immediately with whatever intent extras we already have, then
+        // fill in detail/tags/related as the network responses arrive. The old path blocked on
+        // the detail request before inflating any UI, which made every open feel slow.
+        initUi()
+        load()
     }
 
     override fun onResume() {
@@ -198,27 +160,6 @@ class VideoDetailActivity : BaseActivity() {
         commentsPopupImageViewerController = null
         ActivityStackLimiter.unregister(group = ACTIVITY_STACK_GROUP, activity = this)
         super.onDestroy()
-    }
-
-    private fun showLoadingUi() {
-        val root =
-            FrameLayout(this).apply {
-                ThemeColor.applyBackground(
-                    view = this,
-                    attr = R.attr.blblPageBackdrop,
-                    fallbackRes = R.color.blbl_bg,
-                )
-                addView(
-                    ProgressBar(this@VideoDetailActivity),
-                    FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.WRAP_CONTENT,
-                        FrameLayout.LayoutParams.WRAP_CONTENT,
-                    ).apply {
-                        gravity = Gravity.CENTER
-                    },
-                )
-            }
-        setContentView(root)
     }
 
     private fun initUi() {
@@ -481,6 +422,10 @@ class VideoDetailActivity : BaseActivity() {
                             aid = resolvedAid,
                             cid = resolvedCid,
                         ).takeIf { it >= 0 }
+
+                    // Render title/cover/parts as soon as the detail response is parsed instead
+                    // of waiting for tags and the related-videos request to finish.
+                    applyHeader()
 
                     val (fetchedTags, related) =
                         coroutineScope {
