@@ -40,6 +40,14 @@ class AppPrefsTest {
         assertEquals(0.1f, AppPrefs.normalizeDanmakuArea(0.09f), 0.0001f)
         assertEquals(0.3f, AppPrefs.normalizeDanmakuArea(0.26f), 0.0001f)
         assertEquals(0.6f, AppPrefs.normalizeDanmakuArea(0.55f), 0.0001f)
-        assertEquals(1.0f, AppPrefs.normalizeDanmakuArea(Float.NaN), 0.0001f)
+        assertEquals(AppPrefs.DANMAKU_AREA_DEFAULT, AppPrefs.normalizeDanmakuArea(Float.NaN), 0.0001f)
+    }
+
+    @Test
+    fun normalizePlaybackQn_caps8kButKeeps4kHdrVariants() {
+        assertEquals(120, AppPrefs.normalizePlaybackQn(127))
+        assertEquals(120, AppPrefs.normalizePlaybackQn(120))
+        assertEquals(125, AppPrefs.normalizePlaybackQn(125))
+        assertEquals(126, AppPrefs.normalizePlaybackQn(126))
     }
 }

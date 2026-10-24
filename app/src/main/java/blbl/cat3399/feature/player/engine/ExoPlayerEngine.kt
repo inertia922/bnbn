@@ -72,9 +72,20 @@ internal class ExoPlayerEngine(
     private val volumeBalanceProcessor = VolumeBalanceAudioProcessor(level = audioBalanceLevel)
     private val loadControl: DefaultLoadControl =
         DefaultLoadControl.Builder()
-            // Keep roughly one forward buffer window behind the playhead so in-buffer seek
-            // does not immediately discard media that was already fetched.
-            .setBackBuffer(DefaultLoadControl.DEFAULT_MAX_BUFFER_MS, true)
+            // Start quickly, but keep a larger forward window so a short network dip does not
+            // immediately turn into a rebuffer. The byte cap is important for 4K tracks: a
+            // duration-only 50s buffer can retain hundreds of MB and cause GC pressure/jank
+            // on TV boxes with limited RAM.
+            .setBufferDurationsMs(
+                /* minBufferMs = */ 15_000,
+                /* maxBufferMs = */ 90_000,
+                /* bufferForPlaybackMs = */ 1_500,
+                /* bufferForPlaybackAfterRebufferMs = */ 3_000,
+            )
+            .setTargetBufferBytes(96 * 1024 * 1024)
+            // Keep a short back buffer so in-buffer seek/replay does not discard media
+            // that was just fetched, without holding the old 50s default in memory.
+            .setBackBuffer(20_000, true)
             .build()
     private val liveHlsPlaylistParserFactory: HlsPlaylistParserFactory =
         ExtXStartStrippingHlsPlaylistParserFactory(onPlaylistParsed = onLiveHlsDebugInfo)

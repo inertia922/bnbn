@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="detail_action_like">点赞，长按一键三连</string>
+    <string name="detail_action_coin">投币</string>
+    <string name="detail_action_fav">收藏</string>
     <string name="app_name">哔尼哔尼</string>
     <string name="badge_charging">充电</string>
     <string name="tab_recommend">推荐</string>

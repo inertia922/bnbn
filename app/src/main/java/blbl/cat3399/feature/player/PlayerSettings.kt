@@ -34,7 +34,6 @@ internal object PlayerSettingKeys {
     const val AUDIO_TRACK = "audio_track"
     const val CODEC = "codec"
     const val PLAYBACK_SPEED = "playback_speed"
-    const val AUDIO_BALANCE = "audio_balance"
     const val PLAYBACK_MODE = "playback_mode"
     const val SUBTITLE_MENU = "subtitle_menu"
     const val SUBTITLE_ENABLED = "subtitle_enabled"
@@ -60,10 +59,6 @@ internal object PlayerSettingKeys {
     const val DANMAKU_ALLOW_BOTTOM = "danmaku_allow_bottom"
     const val DANMAKU_ALLOW_COLOR = "danmaku_allow_color"
     const val DANMAKU_ALLOW_SPECIAL = "danmaku_allow_special"
-    const val DEBUG_INFO = "debug_info"
-    const val PERSISTENT_BOTTOM_PROGRESS = "persistent_bottom_progress"
-    const val PERSISTENT_CLOCK = "persistent_clock"
-    const val SEEK_BAR_CLICK_TRAVERSE_COUNT = "seek_bar_click_traverse_count"
 }
 
 internal enum class PlayerSettingsMenu {
@@ -312,7 +307,6 @@ internal fun PlayerActivity.handleSettingsItemClick(item: PlayerSettingsAdapter.
         PlayerSettingKeys.AUDIO_TRACK -> showAudioDialog()
         PlayerSettingKeys.CODEC -> showCodecDialog()
         PlayerSettingKeys.PLAYBACK_SPEED -> showSpeedDialog()
-        PlayerSettingKeys.AUDIO_BALANCE -> showAudioBalanceDialog()
         PlayerSettingKeys.PLAYBACK_MODE -> showPlaybackModeDialog()
         PlayerSettingKeys.SUBTITLE_MENU -> showSubtitleSettingsMenu()
         PlayerSettingKeys.SUBTITLE_ENABLED -> {
@@ -388,29 +382,6 @@ internal fun PlayerActivity.handleSettingsItemClick(item: PlayerSettingsAdapter.
                 updateDanmaku = { copy(allowSpecial = it) },
                 syncToGlobal = { danmakuAllowSpecial = it },
             )
-        PlayerSettingKeys.DEBUG_INFO ->
-            toggleSessionSettingFlag(
-                current = session.debugEnabled,
-                updateSession = { copy(debugEnabled = it) },
-                syncToGlobal = { playerDebugEnabled = it },
-                afterApplied = { updateDebugOverlay() },
-            )
-        PlayerSettingKeys.PERSISTENT_BOTTOM_PROGRESS ->
-            toggleSessionSettingFlag(
-                current = session.persistentBottomProgressEnabled,
-                updateSession = { copy(persistentBottomProgressEnabled = it) },
-                syncToGlobal = { playerPersistentBottomProgressEnabled = it },
-                afterApplied = { updatePersistentBottomProgressBarVisibility() },
-            )
-
-        PlayerSettingKeys.PERSISTENT_CLOCK -> {
-            val appPrefs = BiliClient.prefs
-            appPrefs.playerPersistentClockEnabled = !appPrefs.playerPersistentClockEnabled
-            updateClockVisibility()
-            refreshSettingsPanel()
-        }
-
-        PlayerSettingKeys.SEEK_BAR_CLICK_TRAVERSE_COUNT -> showSeekBarClickTraverseCountDialog()
 
         else -> AppToast.show(this, "暂未实现：${item.title}")
     }
@@ -501,24 +472,9 @@ private fun PlayerActivity.buildRootSettingsItems(
         settingItem(PlayerSettingKeys.PLAYBACK_MODE, "播放模式", playbackModeSubtitle()),
         subtitleSupported.takeIf { it }?.let { settingItem(PlayerSettingKeys.SUBTITLE_MENU, "字幕设置", ">") },
         settingItem(PlayerSettingKeys.DANMAKU_MENU, "弹幕设置", ">"),
-        settingItem(PlayerSettingKeys.AUDIO_BALANCE, "音频平衡", session.audioBalanceLevel.label),
-        settingItem(
-            PlayerSettingKeys.PERSISTENT_BOTTOM_PROGRESS,
-            "底部常驻进度条",
-            session.persistentBottomProgressEnabled.switchText(),
-        ),
-        settingItem(
-            PlayerSettingKeys.PERSISTENT_CLOCK,
-            "常驻时间显示",
-            BiliClient.prefs.playerPersistentClockEnabled.switchText(),
-        ),
-        settingItem(
-            PlayerSettingKeys.SEEK_BAR_CLICK_TRAVERSE_COUNT,
-            "拖完全片需按次数",
-            blbl.cat3399.feature.settings.SettingsText.seekBarClickTraverseCountText(BiliClient.prefs.playerSeekBarClickTraverseCount),
-        ),
+        // Rarely used / diagnostic switches stay in the global settings page. Keeping only the
+        // controls people actually reach for while watching makes this panel faster to scan.
         settingItem(PlayerSettingKeys.PLAYER_ENGINE, "播放器内核", playerEngineSubtitle()),
-        settingItem(PlayerSettingKeys.DEBUG_INFO, "调试信息", session.debugEnabled.switchText()),
     )
 }
 
@@ -757,34 +713,6 @@ internal fun PlayerActivity.showSpeedDialog() {
             updateSession = { copy(playbackSpeed = it) },
             syncToGlobal = { playerSpeed = it },
             afterApplied = { player?.setPlaybackSpeed(it) },
-        )
-    }
-}
-
-internal fun PlayerActivity.showAudioBalanceDialog() {
-    val options = AudioBalanceLevel.ordered
-    val current = session.audioBalanceLevel
-    val checked = options.indexOf(current).takeIf { it >= 0 } ?: 0
-
-    showSettingsChoiceDialog(
-        title = "音频平衡",
-        options = options,
-        checkedIndex = checked,
-        label = AudioBalanceLevel::label,
-    ) { picked ->
-        applySessionSettingValue(
-            value = picked,
-            updateSession = { copy(audioBalanceLevel = it) },
-            syncToGlobal = { playerAudioBalanceLevel = it.prefValue },
-            afterApplied = { nextLevel ->
-                val engine = player
-                if (engine is ExoPlayerEngine) {
-                    engine.setAudioBalanceLevel(nextLevel)
-                    AppToast.show(this, "音频平衡：${nextLevel.label}")
-                } else {
-                    AppToast.show(this, "当前播放器内核不支持音频平衡")
-                }
-            },
         )
     }
 }
@@ -1177,20 +1105,5 @@ internal fun PlayerActivity.showDanmakuAiShieldLevelDialog() {
             syncToGlobal = { danmakuAiShieldLevel = it },
             afterApplied = { reloadDanmakuForCurrentSession() },
         )
-    }
-}
-
-internal fun PlayerActivity.showSeekBarClickTraverseCountDialog() {
-    val prefs = BiliClient.prefs
-    val options = AppPrefs.PLAYER_SEEK_BAR_CLICK_TRAVERSE_COUNT_OPTIONS.toList()
-    val checked = options.indexOf(prefs.playerSeekBarClickTraverseCount).coerceAtLeast(0)
-    showSettingsChoiceDialog(
-        title = "拖完全片需按次数",
-        options = options,
-        checkedIndex = checked,
-        label = { blbl.cat3399.feature.settings.SettingsText.seekBarClickTraverseCountText(it) },
-    ) { picked ->
-        prefs.playerSeekBarClickTraverseCount = picked
-        refreshSettingsPanel()
     }
 }

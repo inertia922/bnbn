@@ -59,12 +59,27 @@ internal class AppVideoApi(
     private val mapper = AppVideoMapper(source)
 
     override suspend fun recommend(request: VideoRecommendRequest): VideoRecommendPage {
-        val idx = (request.fetchRow - 1).coerceAtLeast(0)
-        val json = httpTransport.recommend(idx = idx)
+        val json = httpTransport.recommend(cursor = request.cursor, isRefresh = request.isRefresh)
         checkApiCode(json)
         val itemsJson = json.optJSONObject("data")?.optJSONArray("items") ?: JSONArray()
         val items = withContext(Dispatchers.Default) { mapper.parseRecommendItems(itemsJson) }
-        return VideoRecommendPage(source = source, request = request, items = items)
+        val nextCursor =
+            (itemsJson.length() - 1 downTo 0)
+                .asSequence()
+                .mapNotNull { index ->
+                    itemsJson
+                        .optJSONObject(index)
+                        ?.optLong("idx", -1L)
+                        ?.takeIf { it > 0L }
+                }
+                .firstOrNull()
+                ?.toString()
+        return VideoRecommendPage(
+            source = source,
+            request = request,
+            items = items,
+            nextCursor = nextCursor,
+        )
     }
 
     override suspend fun playUrl(request: VideoPlayRequest): VideoPlayStream {

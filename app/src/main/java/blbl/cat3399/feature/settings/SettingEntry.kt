@@ -35,8 +35,6 @@ enum class SettingId(
     VideoCardLongPressAction("video_card_long_press_action"),
     FollowingListOrder("following_list_order"),
     MainHomeVisibleTabs("main_home_visible_tabs"),
-    MainCategoryVisibleTabs("main_category_visible_tabs"),
-    MainMyVisibleTabs("main_my_visible_tabs"),
 
     // 播放设置
     PlayerPreferredQn("player_preferred_qn"),
@@ -103,21 +101,11 @@ enum class SettingId(
     PlayerKernelCheck("player_kernel_check"),
     AppVersion("app_version"),
     ProjectUrl("project_url"),
-    QqGroup("qq_group"),
     LogTag("log_tag"),
     ExportLogs("export_logs"),
     UploadLogs("upload_logs"),
     AutoUpdateCheckEnabled("auto_update_check_enabled"),
     CheckUpdate("check_update"),
-
-    // 设备信息
-    DeviceCpu("device_cpu"),
-    DeviceModel("device_model"),
-    DeviceSystem("device_system"),
-    DeviceDecoder("device_decoder"),
-    DeviceScreen("device_screen"),
-    DeviceRam("device_ram"),
-
 }
 
 data class SettingEntry(

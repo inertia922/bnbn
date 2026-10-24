@@ -22,6 +22,7 @@ import blbl.cat3399.core.ui.BaseActivity
 import blbl.cat3399.core.ui.Immersive
 import blbl.cat3399.core.ui.ThemeColor
 import blbl.cat3399.core.ui.cloneInUserScale
+import blbl.cat3399.core.ui.popup.AppPopup
 import blbl.cat3399.core.ui.smoothScrollToPositionStart
 import blbl.cat3399.core.util.Format
 import blbl.cat3399.core.util.pgcAccessBadgeTextOf
@@ -96,8 +97,8 @@ class BangumiDetailActivity : BaseActivity() {
             return
         }
 
-        episodeOrderReversed = BiliClient.prefs.pgcEpisodeOrderReversed.takeIf { it } ?: true
-        extrasOrderReversed = BiliClient.prefs.pgcExtrasOrderReversed.takeIf { it } ?: true
+        episodeOrderReversed = BiliClient.prefs.pgcEpisodeOrderReversed
+        extrasOrderReversed = BiliClient.prefs.pgcExtrasOrderReversed
         pendingContinueEpIdHint = continueEpIdArg
         pendingContinueEpIndexHint = continueEpIndexArg
 
@@ -208,6 +209,11 @@ class BangumiDetailActivity : BaseActivity() {
     }
 
     private fun load(showRefreshing: Boolean) {
+        // Keep a stale detail response from overwriting a follow/unfollow action.
+        if (followActionJob?.isActive == true) {
+            binding.swipeRefresh.isRefreshing = false
+            return
+        }
         val token = ++requestToken
         loadJob?.cancel()
         loadJob = null
@@ -239,9 +245,14 @@ class BangumiDetailActivity : BaseActivity() {
                     AppLog.e("BangumiDetail", "load failed seasonId=${seasonIdArg ?: -1L} epId=${epIdArg ?: -1L}", t)
                     AppToast.show(this@BangumiDetailActivity, t.message ?: "加载失败")
                 } finally {
-                    if (token == requestToken) binding.swipeRefresh.isRefreshing = false
+                    if (token == requestToken) {
+                        loadJob = null
+                        binding.swipeRefresh.isRefreshing = false
+                        applyHeader()
+                    }
                 }
             }
+        applyHeader()
     }
 
     private fun applyDetail(detail: BangumiSeasonDetail) {
@@ -257,11 +268,9 @@ class BangumiDetailActivity : BaseActivity() {
                     detail.extraSections.forEach { section -> addAll(section.episodes.map { it.badge }) }
                 },
             )
-        if (detail.isFollowed != null) {
-            isFollowed = detail.isFollowed
-        } else if (isFollowed == null) {
-            isFollowed = false
-        }
+        // A transient failure to read the follow state should not overwrite a state we already
+        // know (and will make the button flip back to "追番" after every refresh).
+        detail.isFollowed?.let { isFollowed = it }
 
         metaText =
             buildList {
@@ -339,11 +348,14 @@ class BangumiDetailActivity : BaseActivity() {
             tags = emptyList(),
             primaryButtonText = getString(if (continueEpisode != null) R.string.my_btn_continue else R.string.my_btn_play),
             secondaryButtonText =
-                if (isFollowed == true) {
-                    if (isDramaArg) "已追剧" else "已追番"
-                } else {
-                    if (isDramaArg) "追剧" else "追番"
+                when {
+                    followActionJob?.isActive == true -> "处理中…"
+                    isFollowed == null && loadJob?.isActive == true -> "查询追番状态中…"
+                    isFollowed == null -> "重新获取追番状态"
+                    isFollowed == true -> if (isDramaArg) "取消追剧" else "取消追番"
+                    else -> if (isDramaArg) "追剧" else "追番"
                 },
+            secondaryActionEnabled = loadJob?.isActive != true && followActionJob?.isActive != true,
             showActions = false,
             partsHeaderText = episodesHeader,
             partsCards = displayEpisodeCards,
@@ -386,6 +398,7 @@ class BangumiDetailActivity : BaseActivity() {
 
     private fun onFollowButtonClicked() {
         if (followActionJob?.isActive == true) return
+        if (loadJob?.isActive == true) return
         if (!BiliClient.cookies.hasSessData()) {
             AppToast.show(this, if (isDramaArg) "请先登录后再追剧" else "请先登录后再追番")
             return
@@ -395,8 +408,32 @@ class BangumiDetailActivity : BaseActivity() {
             AppToast.show(this, "缺少 seasonId")
             return
         }
-        val followed = isFollowed == true
+        val followed = isFollowed
+        if (followed == null) {
+            AppToast.show(this, "正在重新获取追番状态…")
+            load(showRefreshing = true)
+            return
+        }
+        if (!followed) {
+            performFollowAction(seasonId = seasonId, followed = false)
+            return
+        }
 
+        // The button says "取消追番/取消追剧" when followed, so make the destructive action
+        // explicit instead of letting a second click on "已追番" silently toggle the state.
+        val drama = isDramaArg
+        AppPopup.confirm(
+            context = this,
+            title = if (drama) "取消追剧" else "取消追番",
+            message = if (drama) "确定要取消追剧吗？" else "确定要取消追番吗？",
+            positiveText = if (drama) "取消追剧" else "取消追番",
+            negativeText = "再想想",
+            onPositive = { performFollowAction(seasonId = seasonId, followed = true) },
+        )
+    }
+
+    private fun performFollowAction(seasonId: Long, followed: Boolean) {
+        if (followActionJob?.isActive == true) return
         followActionJob =
             lifecycleScope.launch {
                 try {
@@ -422,8 +459,10 @@ class BangumiDetailActivity : BaseActivity() {
                     AppToast.show(this@BangumiDetailActivity, t.message ?: "操作失败")
                 } finally {
                     followActionJob = null
+                    applyHeader()
                 }
             }
+        applyHeader()
     }
 
     private fun playEpisodeCard(

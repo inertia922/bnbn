@@ -1,9 +1,9 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.Blbl.Launcher.Dark" parent="Theme.Blbl.Base.Dark">
         <item name="android:windowBackground">@drawable/bg_launcher_window</item>
         <item name="android:windowSplashScreenBackground">?attr/colorBackground</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_transparent</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
         <item name="android:windowSplashScreenIconBackgroundColor">@android:color/transparent</item>
     </style>
 
@@ -14,7 +14,7 @@
         <item name="blblAccentPressed">@color/blbl_accent_tv_pink_pressed</item>
         <item name="android:windowBackground">@drawable/bg_launcher_window</item>
         <item name="android:windowSplashScreenBackground">?attr/colorBackground</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_transparent</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
         <item name="android:windowSplashScreenIconBackgroundColor">@android:color/transparent</item>
     </style>
 
@@ -25,7 +25,7 @@
         <item name="blblAccentPressed">@color/blbl_accent_classic_pressed</item>
         <item name="android:windowBackground">@drawable/bg_launcher_window</item>
         <item name="android:windowSplashScreenBackground">?attr/colorBackground</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_transparent</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
         <item name="android:windowSplashScreenIconBackgroundColor">@android:color/transparent</item>
     </style>
 </resources>

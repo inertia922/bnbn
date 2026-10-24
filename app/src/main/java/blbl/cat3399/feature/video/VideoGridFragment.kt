@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import blbl.cat3399.R
 import blbl.cat3399.core.api.BiliApi
+import blbl.cat3399.core.api.BiliApiSource
 import blbl.cat3399.core.log.AppLog
 import blbl.cat3399.core.model.VideoCard
 import blbl.cat3399.core.net.BiliClient
@@ -39,6 +40,7 @@ class VideoGridFragment : Fragment(), RefreshKeyHandler, TabSwitchFocusTarget {
     private data class PagingKey(
         val page: Int,
         val recommendFetchRow: Int,
+        val recommendCursor: String? = null,
     )
 
     private data class FetchedPage(
@@ -285,6 +287,11 @@ class VideoGridFragment : Fragment(), RefreshKeyHandler, TabSwitchFocusTarget {
                 } else if (applied.items.isNotEmpty()) {
                     adapter.append(applied.items)
                 }
+                if (source == SRC_RECOMMEND && applied.items.isNotEmpty()) {
+                    BiliClient.prefs.rememberRecommendShownAids(
+                        applied.items.mapNotNull { it.aid?.takeIf { aid -> aid > 0L } },
+                    )
+                }
                 _binding?.let { b ->
                     b.recycler.postIfAlive(isAlive = { _binding === b && isResumed }) {
                         if (pendingFocusFirstCardAfterRefresh && applied.isRefresh) {
@@ -509,9 +516,24 @@ class VideoGridFragment : Fragment(), RefreshKeyHandler, TabSwitchFocusTarget {
     private suspend fun fetchVisiblePage(key: PagingKey): FetchedPage {
         val ps = 24
         var currentKey = key
-        while (true) {
+        val recentlyShown =
+            if (source == SRC_RECOMMEND) {
+                BiliClient.prefs.recommendShownAids().toHashSet()
+            } else {
+                emptySet()
+            }
+        val seenInThisFetch = HashSet<String>()
+        var attempts = 0
+        while (attempts < MAX_FILTER_ATTEMPTS) {
+            attempts++
             val rawPage = fetchRawPage(currentKey, ps)
-            val visibleItems = VideoCardVisibilityFilter.filterVisibleFresh(rawPage.items, loadedStableKeys)
+            val visibleItems =
+                VideoCardVisibilityFilter
+                    .filterVisibleFresh(rawPage.items, loadedStableKeys)
+                    .filterNot { card ->
+                        val aid = card.aid?.takeIf { it > 0L }
+                        (aid != null && recentlyShown.contains(aid)) || !seenInThisFetch.add(card.stableKey())
+                    }
             if (visibleItems.isNotEmpty() || !rawPage.hasMore || rawPage.nextKey == currentKey || rawPage.items.isEmpty()) {
                 return FetchedPage(
                     items = visibleItems,
@@ -521,6 +543,13 @@ class VideoGridFragment : Fragment(), RefreshKeyHandler, TabSwitchFocusTarget {
             }
             currentKey = rawPage.nextKey
         }
+        // The server repeated only suppressed items several times. Stop instead of hammering it
+        // forever; the user can refresh to start a new recommendation session.
+        return FetchedPage(
+            items = emptyList(),
+            nextKey = currentKey,
+            hasMore = false,
+        )
     }
 
     private suspend fun fetchRawPage(
@@ -529,22 +558,26 @@ class VideoGridFragment : Fragment(), RefreshKeyHandler, TabSwitchFocusTarget {
     ): FetchedPage {
         return when (source) {
             SRC_RECOMMEND -> {
-                val items =
-                    BiliApi.recommend(
+                val page =
+                    BiliApi.recommendPage(
                         freshIdx = key.page,
                         ps = ps,
                         fetchRow = key.recommendFetchRow,
                         lastShowList = currentLastShowList(),
                         isRefresh = key.page == 1,
+                        cursor = key.recommendCursor,
                     )
                 FetchedPage(
-                    items = items,
+                    items = page.items,
                     nextKey =
                         key.copy(
                             page = key.page + 1,
-                            recommendFetchRow = key.recommendFetchRow + items.size,
+                            recommendFetchRow = key.recommendFetchRow + page.items.size,
+                            recommendCursor = page.nextCursor,
                         ),
-                    hasMore = items.isNotEmpty(),
+                    hasMore =
+                        page.items.isNotEmpty() &&
+                            (page.source == BiliApiSource.WEB || page.nextCursor != null),
                 )
             }
 
@@ -587,13 +620,20 @@ class VideoGridFragment : Fragment(), RefreshKeyHandler, TabSwitchFocusTarget {
     }
 
     private fun currentLastShowList(): String {
-        if (!::adapter.isInitialized) return ""
-        val aids =
+        val aids = LinkedHashSet<Long>()
+        // Persisted history survives app restarts and tab recreation; the in-memory adapter is
+        // merged after it so a refresh still tells the server about the current page.
+        BiliClient.prefs.recommendShownAids().takeLast(LAST_SHOWLIST_MAX).forEach(aids::add)
+        if (::adapter.isInitialized) {
             adapter.snapshot()
                 .mapNotNull { it.aid?.takeIf { a -> a > 0 } }
-                .distinct()
+                .forEach(aids::add)
+        }
         if (aids.isEmpty()) return ""
-        return aids.joinToString(separator = ",") { "av_$it" }
+        return aids
+            .toList()
+            .takeLast(LAST_SHOWLIST_MAX)
+            .joinToString(separator = ",") { "av_$it" }
     }
 
     private fun openDetail(position: Int) {
@@ -617,6 +657,8 @@ class VideoGridFragment : Fragment(), RefreshKeyHandler, TabSwitchFocusTarget {
         }
 
     companion object {
+        private const val MAX_FILTER_ATTEMPTS = 4
+        private const val LAST_SHOWLIST_MAX = 200
         private const val RESET_DEBOUNCE_MS = 1000L
         private val sLastResetBySource = mutableMapOf<String, Long>()
 

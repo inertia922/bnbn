@@ -311,22 +311,22 @@ class AppPrefs(context: Context) {
         set(value) = prefs.edit().putFloat(KEY_DANMAKU_AREA, normalizeDanmakuArea(value)).apply()
 
     var playerPreferredQn: Int
-        get() = prefs.getInt(KEY_PLAYER_PREFERRED_QN, 120)
-        set(value) = prefs.edit().putInt(KEY_PLAYER_PREFERRED_QN, value).apply()
+        get() = normalizePlaybackQn(prefs.getInt(KEY_PLAYER_PREFERRED_QN, 120))
+        set(value) = prefs.edit().putInt(KEY_PLAYER_PREFERRED_QN, normalizePlaybackQn(value)).apply()
 
     var playerPreferredQnPgc: Int
         get() {
             if (!prefs.contains(KEY_PLAYER_PREFERRED_QN_PGC)) return playerPreferredQn
-            return prefs.getInt(KEY_PLAYER_PREFERRED_QN_PGC, playerPreferredQn)
+            return normalizePlaybackQn(prefs.getInt(KEY_PLAYER_PREFERRED_QN_PGC, playerPreferredQn))
         }
-        set(value) = prefs.edit().putInt(KEY_PLAYER_PREFERRED_QN_PGC, value).apply()
+        set(value) = prefs.edit().putInt(KEY_PLAYER_PREFERRED_QN_PGC, normalizePlaybackQn(value)).apply()
 
     var playerPreferredQnPortrait: Int
         get() {
             if (!prefs.contains(KEY_PLAYER_PREFERRED_QN_PORTRAIT)) return playerPreferredQn
-            return prefs.getInt(KEY_PLAYER_PREFERRED_QN_PORTRAIT, playerPreferredQn)
+            return normalizePlaybackQn(prefs.getInt(KEY_PLAYER_PREFERRED_QN_PORTRAIT, playerPreferredQn))
         }
-        set(value) = prefs.edit().putInt(KEY_PLAYER_PREFERRED_QN_PORTRAIT, value).apply()
+        set(value) = prefs.edit().putInt(KEY_PLAYER_PREFERRED_QN_PORTRAIT, normalizePlaybackQn(value)).apply()
 
     var playerPreferredCodec: String
         get() = prefs.getString(KEY_PLAYER_CODEC, "AVC") ?: "AVC"
@@ -853,11 +853,11 @@ class AppPrefs(context: Context) {
         }
 
     var pgcEpisodeOrderReversed: Boolean
-        get() = prefs.getBoolean(KEY_PGC_EPISODE_ORDER_REVERSED, false)
+        get() = prefs.getBoolean(KEY_PGC_EPISODE_ORDER_REVERSED, true)
         set(value) = prefs.edit().putBoolean(KEY_PGC_EPISODE_ORDER_REVERSED, value).apply()
 
     var pgcExtrasOrderReversed: Boolean
-        get() = prefs.getBoolean(KEY_PGC_EXTRAS_ORDER_REVERSED, false)
+        get() = prefs.getBoolean(KEY_PGC_EXTRAS_ORDER_REVERSED, true)
         set(value) = prefs.edit().putBoolean(KEY_PGC_EXTRAS_ORDER_REVERSED, value).apply()
 
     var searchHistory: List<String>
@@ -894,6 +894,29 @@ class AppPrefs(context: Context) {
         val target = keyword.trim()
         if (target.isBlank()) return
         searchHistory = searchHistory.filterNot { it.equals(target, ignoreCase = true) }
+    }
+
+    fun recommendShownAids(): List<Long> =
+        prefs
+            .getString(KEY_RECOMMEND_SHOWN_AIDS, "")
+            .orEmpty()
+            .split(',')
+            .mapNotNull { it.trim().toLongOrNull()?.takeIf { aid -> aid > 0L } }
+
+    fun rememberRecommendShownAids(
+        aids: Collection<Long>,
+        maxSize: Int = RECOMMEND_SHOWN_AIDS_MAX,
+    ) {
+        val incoming = aids.filter { it > 0L }
+        if (incoming.isEmpty()) return
+        val merged = LinkedHashSet<Long>(recommendShownAids())
+        merged.addAll(incoming)
+        val trimmed = merged.toList().takeLast(maxSize.coerceAtLeast(1))
+        prefs.edit().putString(KEY_RECOMMEND_SHOWN_AIDS, trimmed.joinToString(",")).apply()
+    }
+
+    fun clearRecommendShownAids() {
+        prefs.edit().remove(KEY_RECOMMEND_SHOWN_AIDS).apply()
     }
 
     fun exportConfigSnapshotJson(): JSONObject =
@@ -1155,6 +1178,8 @@ class AppPrefs(context: Context) {
         private const val KEY_PGC_EPISODE_ORDER_REVERSED = "pgc_episode_order_reversed"
         private const val KEY_PGC_EXTRAS_ORDER_REVERSED = "pgc_extras_order_reversed"
         private const val KEY_SEARCH_HISTORY = "search_history"
+        private const val KEY_RECOMMEND_SHOWN_AIDS = "recommend_shown_aids"
+        private const val RECOMMEND_SHOWN_AIDS_MAX = 600
         private const val KEY_GAIA_VGATE_V_VOUCHER = "gaia_vgate_v_voucher"
         private const val KEY_GAIA_VGATE_V_VOUCHER_SAVED_AT_MS = "gaia_vgate_v_voucher_saved_at_ms"
 
@@ -1401,6 +1426,11 @@ class AppPrefs(context: Context) {
                 THEME_PRESET_TV_PINK_ILLUSTRATION -> THEME_PRESET_TV_PINK_ILLUSTRATION
                 else -> THEME_PRESET_DEFAULT
             }
+        }
+
+        fun normalizePlaybackQn(value: Int): Int {
+            // 127 is 8K; this client caps playback at 4K.
+            return if (value == 127) 120 else value
         }
 
         fun normalizeApiSource(value: String?): String {

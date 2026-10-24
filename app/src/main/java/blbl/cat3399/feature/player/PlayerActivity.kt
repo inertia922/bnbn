@@ -74,6 +74,8 @@ import blbl.cat3399.core.ui.BaseActivity
 import blbl.cat3399.core.ui.DoubleBackToExitHandler
 import blbl.cat3399.core.ui.FocusTreeUtils
 import blbl.cat3399.core.ui.Immersive
+import blbl.cat3399.core.ui.popup.AppPopup
+import blbl.cat3399.core.ui.popup.PopupHandle
 import blbl.cat3399.core.ui.popup.PopupHost
 import blbl.cat3399.core.util.Format as BlblFormat
 import blbl.cat3399.feature.my.BangumiDetailActivity
@@ -333,6 +335,7 @@ class PlayerActivity : BaseActivity() {
     private var playUrlAutoRefreshJob: kotlinx.coroutines.Job? = null
     private var playUrlAutoRefreshToken: Int = 0
     private var playUrlAutoRefreshLastReloadAtElapsedMs: Long = 0L
+    private var playbackErrorDialog: PopupHandle? = null
 
     internal var currentVideoShot: VideoShot? = null
     internal var videoShotImageCache: VideoShotImageCache? = null
@@ -358,6 +361,40 @@ class PlayerActivity : BaseActivity() {
                 "resumeAfterRelease=${if (resumeAfterDecoderRelease) 1 else 0} type=$errorLabel",
         )
         return true
+    }
+
+    private fun showPlaybackFailureDialog(message: String) {
+        if (isPlayerTeardownInProgress()) return
+        if (playbackErrorDialog?.isShowing == true) return
+        playbackErrorDialog =
+            AppPopup.confirm(
+                context = this,
+                title = "播放失败",
+                message = message,
+                positiveText = "重试",
+                negativeText = "退出播放器",
+                onPositive = { retryPlaybackAfterFailure() },
+                onNegative = {
+                    requestExitCleanup(reason = "playback_error_exit")
+                    finish()
+                },
+                onDismiss = { playbackErrorDialog = null },
+            )
+    }
+
+    private fun retryPlaybackAfterFailure() {
+        if (currentBvid.isBlank() || currentCid <= 0L) {
+            requestExitCleanup(reason = "playback_error_retry_invalid")
+            finish()
+            return
+        }
+        AppToast.show(this, "正在重试…")
+        reloadStream(keepPosition = true, resetConstraints = true, autoPlay = true)
+    }
+
+    private fun dismissPlaybackFailureDialog() {
+        playbackErrorDialog?.dismiss()
+        playbackErrorDialog = null
     }
 
     private fun exitTraceStart(trigger: String) {
@@ -928,10 +965,12 @@ class PlayerActivity : BaseActivity() {
                                 return
                             }
                         }
-                        AppToast.show(this@PlayerActivity, "播放失败：${playbackException.errorCodeName}")
+                        showPlaybackFailureDialog(
+                            playbackFailureTip(error = playbackException, httpStatusCode = httpCode),
+                        )
                         return
                     }
-                    AppToast.showLong(this@PlayerActivity, "播放失败：${error.message ?: "未知错误"}")
+                    showPlaybackFailureDialog(playbackFailureTip(error))
                 }
 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -958,6 +997,7 @@ class PlayerActivity : BaseActivity() {
                             else -> playbackState.toString()
                         }
                     trace?.log("player:state", "state=$state pos=${engine.currentPosition}ms")
+                    if (playbackState == Player.STATE_READY) dismissPlaybackFailureDialog()
                     if (playbackState == Player.STATE_BUFFERING && debug.lastPlaybackState != Player.STATE_BUFFERING && engine.playWhenReady) {
                         debug.rebufferCount++
                     }
@@ -1015,6 +1055,7 @@ class PlayerActivity : BaseActivity() {
                     traceFirstFrameLogged = true
                     trace?.log("ijk:firstFrame", "pos=${engine.currentPosition}ms")
                     dismissStartupLoadingOverlay()
+                    dismissPlaybackFailureDialog()
                 }
             },
         )
@@ -1057,6 +1098,7 @@ class PlayerActivity : BaseActivity() {
                 traceFirstFrameLogged = true
                 trace?.log("exo:firstFrame", "pos=${engine.currentPosition}ms")
                 dismissStartupLoadingOverlay()
+                dismissPlaybackFailureDialog()
             }
         },
         )
@@ -1151,7 +1193,7 @@ class PlayerActivity : BaseActivity() {
         prefs.gaiaVgateVVoucherSavedAtMs = System.currentTimeMillis()
     }
 
-    private suspend fun requestPlayStream(
+    internal suspend fun requestPlayStream(
         bvid: String,
         aid: Long?,
         cid: Long,
@@ -1269,6 +1311,8 @@ class PlayerActivity : BaseActivity() {
         qn: Int,
         fnval: Int,
         constraints: PlaybackConstraints,
+        // Started in parallel with the video detail request when cid is already known.
+        prefetchedPrimary: Result<VideoPlayStream>? = null,
     ): PlayFetchResult {
         val riskContext =
             buildPlayUrlRiskContext(
@@ -1323,15 +1367,16 @@ class PlayerActivity : BaseActivity() {
 
         val primaryStream =
             try {
-                requestPlayStream(
-                    bvid = bvid,
-                    aid = aid,
-                    cid = cid,
-                    epId = epId,
-                    qn = qn,
-                    fnval = fnval,
-                    tryLook = false,
-                )
+                prefetchedPrimary?.getOrThrow()
+                    ?: requestPlayStream(
+                        bvid = bvid,
+                        aid = aid,
+                        cid = cid,
+                        epId = epId,
+                        qn = qn,
+                        fnval = fnval,
+                        tryLook = false,
+                    )
             } catch (t: Throwable) {
                 val e = t as? BiliApiException
                 if (e != null && isRiskControl(e)) {
@@ -1870,6 +1915,7 @@ class PlayerActivity : BaseActivity() {
     }
 
     override fun onDestroy() {
+        dismissPlaybackFailureDialog()
         val t0 = SystemClock.elapsedRealtime()
         exitTraceDestroyAtMs = t0
         if (exitCleanupRequested || isFinishing || exitTraceStartAtMs > 0L) {
@@ -3125,7 +3171,7 @@ class PlayerActivity : BaseActivity() {
             } catch (t: Throwable) {
                 AppLog.e("Player", "reloadStream failed", t)
                 if (!handlePlayUrlErrorIfNeeded(t)) {
-                    AppToast.show(this@PlayerActivity, "切换失败：${t.message}")
+                    AppToast.showLong(this@PlayerActivity, playbackFailureTip(t))
                 }
             }
         }
@@ -3478,13 +3524,13 @@ class PlayerActivity : BaseActivity() {
     }
 
     internal fun playUrlParamsForSession(): Pair<Int, Int> {
-        // Always request the highest; B 站会根据登录/会员权限返回实际可用清晰度。
-        val qn = 127
-        var fnval = 4048 // all available DASH video
-        fnval = fnval or 128 // 4K
-        fnval = fnval or 1024 // 8K
-        fnval = fnval or 64 // HDR (may be ignored if not allowed)
-        fnval = fnval or 512 // Dolby Vision (may be ignored if not allowed)
+        // This client intentionally stops at 4K. Requesting 8K (qn=127) makes the server
+        // return an extra 8K track that the TV box cannot decode smoothly and only inflates
+        // the response / CDN load.
+        val qn = 120
+        // 16=DASH, 64=HDR, 128=4K, 256=Dolby Audio, 512=Dolby Vision, 2048=AV1.
+        // Deliberately omit 1024 (8K).
+        val fnval = 16 or 64 or 128 or 256 or 512 or 2048
         return qn to fnval
     }
 

@@ -2,7 +2,6 @@ package blbl.cat3399.feature.settings
 
 import android.app.ActivityManager
 import android.content.Context
-import android.content.res.Resources
 import android.media.MediaCodecInfo
 import android.media.MediaCodecList
 import android.os.Build
@@ -228,32 +227,6 @@ object SettingsText {
         if (labels.isEmpty()) return "无"
         if (labels.size <= 4) return labels.joinToString(separator = " / ")
         return labels.take(3).joinToString(separator = " / ") + " 等${labels.size}项"
-    }
-
-    fun screenText(resources: Resources): String {
-        val uiDm = resources.displayMetrics
-        val width = uiDm.widthPixels
-        val height = uiDm.heightPixels
-
-        val sysDm = Resources.getSystem().displayMetrics
-        val sysScale = sysDm.density
-        val scaleText =
-            if (sysScale.isFinite() && sysScale > 0f) {
-                val x100 = (sysScale * 100f).roundToInt().toFloat() / 100f
-                val x10 = (x100 * 10f).roundToInt().toFloat() / 10f
-                val show =
-                    when {
-                        kotlin.math.abs(x100 - x100.toInt()) < 0.001f -> x100.toInt().toString()
-                        kotlin.math.abs(x100 - x10) < 0.001f -> String.format(Locale.US, "%.1f", x100)
-                        else -> String.format(Locale.US, "%.2f", x100)
-                    }
-                "${show}x"
-            } else {
-                "-"
-            }
-
-        // Settings -> Device Info -> Screen: show only resolution + system display scaling.
-        return "${width}x${height} $scaleText"
     }
 
     fun ramText(context: Context): String {

@@ -459,7 +459,7 @@ class SearchInteractor(
         items.forEach { loaded.add(idOf(it)) }
 
         apply(items, applied.isRefresh)
-        renderer.onResultsApplied()
+        renderer.onResultsApplied(isRefresh = applied.isRefresh)
         state.markMemoryForTab(tabIndexAtStart)
     }
 

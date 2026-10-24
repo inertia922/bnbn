@@ -57,6 +57,7 @@ class VideoDetailHeaderAdapter(
 
     private var primaryButtonText: String? = null
     private var secondaryButtonText: String? = null
+    private var secondaryActionEnabled: Boolean = true
     private var showActions: Boolean = true
     private var actionLiked: Boolean = false
     private var actionCoinCount: Int = 0
@@ -116,6 +117,7 @@ class VideoDetailHeaderAdapter(
         tags: List<VideoTag>,
         primaryButtonText: String?,
         secondaryButtonText: String?,
+        secondaryActionEnabled: Boolean = true,
         showActions: Boolean,
         actionLiked: Boolean = false,
         actionCoinCount: Int = 0,
@@ -154,6 +156,7 @@ class VideoDetailHeaderAdapter(
 
         this.primaryButtonText = primaryButtonText
         this.secondaryButtonText = secondaryButtonText
+        this.secondaryActionEnabled = secondaryActionEnabled
         this.showActions = showActions
         this.actionLiked = actionLiked
         this.actionCoinCount = actionCoinCount
@@ -230,6 +233,7 @@ class VideoDetailHeaderAdapter(
             tags = tags,
             primaryButtonText = primaryButtonText,
             secondaryButtonText = secondaryButtonText,
+            secondaryActionEnabled = secondaryActionEnabled,
             showActions = showActions,
             actionLiked = actionLiked,
             actionCoinCount = actionCoinCount,
@@ -379,6 +383,7 @@ class VideoDetailHeaderAdapter(
             tags: List<VideoTag>,
             primaryButtonText: String?,
             secondaryButtonText: String?,
+            secondaryActionEnabled: Boolean,
             showActions: Boolean,
             actionLiked: Boolean,
             actionCoinCount: Int,
@@ -448,6 +453,7 @@ class VideoDetailHeaderAdapter(
             val safeSecondary = secondaryButtonText?.trim().takeIf { !it.isNullOrBlank() }
             binding.btnSecondary.isVisible = safeSecondary != null
             binding.btnSecondary.text = safeSecondary.orEmpty()
+            binding.btnSecondary.isEnabled = secondaryActionEnabled
 
             binding.btnLike.isVisible = showActions
             binding.btnCoin.isVisible = showActions

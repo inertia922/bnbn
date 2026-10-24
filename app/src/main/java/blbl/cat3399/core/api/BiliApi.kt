@@ -32,6 +32,7 @@ import blbl.cat3399.core.api.video.VideoPlayerInfoRequest
 import blbl.cat3399.core.api.video.VideoPlayRequest
 import blbl.cat3399.core.api.video.VideoPlayStream
 import blbl.cat3399.core.api.video.VideoPopularRequest
+import blbl.cat3399.core.api.video.VideoRecommendPage
 import blbl.cat3399.core.api.video.VideoRecommendRequest
 import blbl.cat3399.core.api.video.VideoRegionRankRequest
 import blbl.cat3399.core.api.video.VideoSeriesArchivesRequest
@@ -46,6 +47,7 @@ import blbl.cat3399.core.util.parseBangumiRedirectUrl
 import blbl.cat3399.proto.dm.DmSegMobileReply
 import blbl.cat3399.proto.dmview.DmWebViewReply
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -896,6 +898,29 @@ object BiliApi {
         )
     }
 
+    private suspend fun pgcFollowState(seasonId: Long): Boolean? {
+        val url = BiliClient.withQuery(
+            "https://api.bilibili.com/pgc/view/web/season/user/status",
+            mapOf("season_id" to seasonId.toString()),
+        )
+        val json = BiliClient.getJson(
+            url,
+            headers = piliWebHeaders(targetUrl = url, includeCookie = true),
+            noCookies = true,
+        )
+        val code = json.optInt("code", 0)
+        if (code != 0) {
+            throw BiliApiException(apiCode = code, apiMessage = json.optString("message", json.optString("msg", "")))
+        }
+        return parsePgcFollowState(json.optJSONObject("result"))
+    }
+
+    private fun parsePgcFollowState(status: JSONObject?): Boolean? =
+        pgcFollowStateOf(
+            follow = status?.optString("follow", ""),
+            followStatus = status?.optInt("follow_status", -1),
+        )
+
     private suspend fun pgcFollowAction(
         url: String,
         seasonId: Long,
@@ -1045,15 +1070,22 @@ object BiliApi {
                 "parsed=$progressLastEpId episodes=${parsed.first.size} extra=${parsed.second.sumOf { it.episodes.size }}",
         )
         val resolvedSeasonId = result.optLong("season_id").takeIf { it > 0 } ?: seasonId ?: 0L
-        val userStatus = result.optJSONObject("user_status") ?: JSONObject()
-        val follow = userStatus.optInt("follow", -1).takeIf { it >= 0 }
-        val followStatus = userStatus.optInt("follow_status", -1).takeIf { it >= 0 }
+        val metadataFollow = parsePgcFollowState(result.optJSONObject("user_status"))
+        // The season response usually already contains user_status.follow/follow_status.
+        // Only pay for the extra user/status request when the detail response omitted it.
         val isFollowed =
             when {
-                follow == 1 -> true
-                follow == 0 -> false
-                followStatus != null -> followStatus > 0
-                else -> null
+                metadataFollow != null -> metadataFollow
+                !BiliClient.cookies.hasSessData() -> false
+                else -> {
+                    try {
+                        pgcFollowState(resolvedSeasonId)
+                    } catch (t: Exception) {
+                        if (t is CancellationException) throw t
+                        AppLog.e(TAG, "PGC follow state failed seasonId=$resolvedSeasonId", t)
+                        null
+                    }
+                }
             }
         return BangumiSeasonDetail(
             seasonId = resolvedSeasonId,
@@ -1366,23 +1398,41 @@ object BiliApi {
         return withContext(Dispatchers.Default) { parsePgcPageToBangumiSeasons(json, moduleTitleFilter = "exclude_recommend") }
     }
 
+    suspend fun recommendPage(
+        freshIdx: Int = 1,
+        ps: Int = 20,
+        fetchRow: Int = 1,
+        lastShowList: String = "",
+        isRefresh: Boolean = false,
+        cursor: String? = null,
+    ): VideoRecommendPage =
+        VideoApiGateway.recommend(
+            VideoRecommendRequest(
+                freshIdx = freshIdx,
+                ps = ps,
+                fetchRow = fetchRow,
+                lastShowList = lastShowList,
+                isRefresh = isRefresh,
+                cursor = cursor,
+            ),
+        )
+
     suspend fun recommend(
         freshIdx: Int = 1,
         ps: Int = 20,
         fetchRow: Int = 1,
         lastShowList: String = "",
         isRefresh: Boolean = false,
+        cursor: String? = null,
     ): List<VideoCard> =
-        VideoApiGateway
-            .recommend(
-                VideoRecommendRequest(
-                    freshIdx = freshIdx,
-                    ps = ps,
-                    fetchRow = fetchRow,
-                    lastShowList = lastShowList,
-                    isRefresh = isRefresh,
-                ),
-            ).items
+        recommendPage(
+            freshIdx = freshIdx,
+            ps = ps,
+            fetchRow = fetchRow,
+            lastShowList = lastShowList,
+            isRefresh = isRefresh,
+            cursor = cursor,
+        ).items
 
     suspend fun popular(pn: Int = 1, ps: Int = 20): List<VideoCard> = popularPage(pn = pn, ps = ps).items
 

@@ -311,33 +311,46 @@ class VideoCardAdapter(
             binding.progressWatch.progress = watchProgressUi?.progressPermille ?: 0
 
             binding.tvTitle.text = item.title
-            val subtitleText =
-                item.pubDateText
-                    ?: if (item.ownerName.isBlank()) "" else "UP ${item.ownerName}"
-            binding.tvSubtitle.text = subtitleText
-            val pubDateText = item.pubDate?.let { Format.pubDateText(it) }.orEmpty()
+            val ownerName = item.ownerName.trim()
+            val ownerFace = item.ownerFace?.trim().orEmpty()
+            val showOwner = !isEpisodeStyleCard && (ownerName.isNotBlank() || ownerFace.isNotBlank())
+            binding.llOwner.isVisible = showOwner
+            binding.ivOwnerAvatar.isVisible = !isEpisodeStyleCard && ownerFace.isNotBlank()
+            if (!isEpisodeStyleCard && ownerFace.isNotBlank()) {
+                ImageLoader.loadInto(binding.ivOwnerAvatar, ImageUrl.avatar(ownerFace))
+            } else {
+                binding.ivOwnerAvatar.setImageDrawable(null)
+            }
+            binding.tvSubtitle.text = ownerName
+            binding.tvSubtitle.isVisible = !isEpisodeStyleCard && ownerName.isNotBlank()
+
+            val pubDateText =
+                item.pubDateText?.trim().takeIf { !it.isNullOrBlank() }
+                    ?: item.pubDate?.let { Format.pubDateText(it) }.orEmpty()
             binding.tvPubdate.text = pubDateText
-            val showSubtitleRow = !isEpisodeStyleCard && (subtitleText.isNotBlank() || pubDateText.isNotBlank())
+            binding.tvPubdate.isVisible = !isEpisodeStyleCard && pubDateText.isNotBlank()
+
+            val viewCount = item.view?.takeIf { it > 0 }
+            val danmakuCount = item.danmaku?.takeIf { it > 0 }
+            val statsText =
+                buildList {
+                    viewCount?.let { add("${Format.count(it)}次") }
+                    danmakuCount?.let { add("${Format.count(it)}弹幕") }
+                }.joinToString(" · ")
+            binding.tvStats.text = statsText
+            binding.tvStats.isVisible = !isEpisodeStyleCard && statsText.isNotBlank()
+
+            // Stats and uploader now live below the title, matching the large-screen feed layout.
+            binding.llStats.isVisible = false
+
+            val showSubtitleRow = !isEpisodeStyleCard && (showOwner || statsText.isNotBlank() || pubDateText.isNotBlank())
             binding.llSubtitle.isVisible = showSubtitleRow
-            binding.tvSubtitle.isVisible = showSubtitleRow && subtitleText.isNotBlank()
-            binding.tvPubdate.isVisible = showSubtitleRow && pubDateText.isNotBlank()
 
             val showDuration = !isEpisodeStyleCard && watchProgressUi == null && item.durationSec > 0
             binding.tvDuration.isVisible = showDuration
             if (showDuration) {
                 binding.tvDuration.text = Format.duration(item.durationSec)
             }
-
-            val viewCount = item.view?.takeIf { it > 0 }
-            val danmakuCount = item.danmaku?.takeIf { it > 0 }
-            val showStats = !isEpisodeStyleCard && watchProgressUi == null && (viewCount != null || danmakuCount != null)
-            binding.llStats.isVisible = showStats
-            binding.ivStatPlay.isVisible = viewCount != null
-            binding.tvView.isVisible = viewCount != null
-            binding.ivStatDanmaku.isVisible = danmakuCount != null
-            binding.tvDanmaku.isVisible = danmakuCount != null
-            viewCount?.let { binding.tvView.text = Format.count(it) }
-            danmakuCount?.let { binding.tvDanmaku.text = Format.count(it) }
 
             val accessBadgeText = item.accessBadgeText?.trim()?.takeIf { it.isNotBlank() }
             binding.tvChargeBadge.isVisible = accessBadgeText != null || item.isChargingArc

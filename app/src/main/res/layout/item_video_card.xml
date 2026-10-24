@@ -8,7 +8,7 @@
     android:focusable="true"
     android:stateListAnimator="@animator/blbl_focus_scale"
     app:cardBackgroundColor="@android:color/transparent"
-    app:cardCornerRadius="10dp"
+    app:cardCornerRadius="12dp"
     app:cardElevation="0dp"
     app:strokeColor="?attr/blblFocusStrokeColor"
     app:strokeWidth="2dp"
@@ -268,6 +268,7 @@
                 android:layout_height="wrap_content"
                 android:layout_margin="@dimen/video_card_text_margin"
                 android:orientation="horizontal"
+                android:visibility="gone"
                 android:paddingHorizontal="@dimen/video_card_duration_padding_h"
                 android:paddingVertical="@dimen/video_card_duration_padding_v"
                 app:layout_constraintBottom_toBottomOf="parent"
@@ -328,6 +329,7 @@
             android:maxLines="2"
             android:textColor="?attr/colorOnSurface"
             android:textSize="@dimen/video_card_title_text_size"
+            android:textStyle="bold"
             app:layout_constraintBottom_toTopOf="@id/ll_subtitle"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintHeight_default="wrap"
@@ -340,17 +342,44 @@
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="@dimen/video_card_text_margin"
             android:layout_marginBottom="@dimen/video_card_text_margin"
-            android:orientation="horizontal"
+            android:orientation="vertical"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/tv_title">
 
-            <TextView
-                android:id="@+id/tv_subtitle"
-                android:layout_width="0dp"
+            <LinearLayout
+                android:id="@+id/ll_owner"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <com.google.android.material.imageview.ShapeableImageView
+                    android:id="@+id/iv_owner_avatar"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:layout_marginEnd="6dp"
+                    android:contentDescription="@string/app_name"
+                    android:scaleType="centerCrop"
+                    app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay_Blbl_Circular" />
+
+                <TextView
+                    android:id="@+id/tv_subtitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:textSize="@dimen/video_card_subtitle_text_size" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tv_stats"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:textColor="?android:attr/textColorSecondary"
@@ -358,9 +387,9 @@
 
             <TextView
                 android:id="@+id/tv_pubdate"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
+                android:layout_marginTop="1dp"
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:textColor="?android:attr/textColorSecondary"

@@ -2609,6 +2609,9 @@ class SettingsInteractionHandler(
                             }
                         }
                     }
+                    // Also reset the local recommendation de-duplication ring so the next feed
+                    // refresh can show items again.
+                    BiliClient.prefs.clearRecommendShownAids()
 
                     popup?.dismiss()
                     AppToast.show(activity, "已清理缓存")

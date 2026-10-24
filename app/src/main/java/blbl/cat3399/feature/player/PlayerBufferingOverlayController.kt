@@ -11,7 +11,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private const val DEFAULT_BUFFERING_OVERLAY_SHOW_DELAY_MS = 1_000L
+private const val DEFAULT_BUFFERING_OVERLAY_SHOW_DELAY_MS = 2_000L
 
 internal class PlayerBufferingOverlayController(
     private val context: Context,

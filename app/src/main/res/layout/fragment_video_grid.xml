@@ -13,5 +13,5 @@
         android:focusable="true"
         android:clipChildren="false"
         android:clipToPadding="false"
-        android:padding="8dp" />
+        android:padding="12dp" />
 </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>

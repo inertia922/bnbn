@@ -1,14 +1,17 @@
 package blbl.cat3399.core.api.video
 
 import blbl.cat3399.core.api.ApiSourceSelector
+import blbl.cat3399.core.api.ApiSourceUnavailableException
 import blbl.cat3399.core.api.BiliApiCapability
 import blbl.cat3399.core.api.BiliApiSource
 import blbl.cat3399.core.api.BiliApiSourceProvider
+import blbl.cat3399.core.log.AppLog
 import blbl.cat3399.core.model.VideoCard
 import blbl.cat3399.core.model.VideoTag
 import blbl.cat3399.core.net.BiliClient
 import blbl.cat3399.core.api.video.app.AppVideoApi
 import blbl.cat3399.core.api.video.web.WebVideoApi
+import kotlinx.coroutines.CancellationException
 
 data class VideoRecommendRequest(
     val freshIdx: Int = 1,
@@ -19,12 +22,16 @@ data class VideoRecommendRequest(
     val lastShowList: String = "",
     // Whether this is the first fetch of a fresh session (brush=1) vs load-more (brush=0).
     val isRefresh: Boolean = false,
+    // App feed uses an opaque cursor (the last item's idx) instead of a row number.
+    val cursor: String? = null,
 )
 
 data class VideoRecommendPage(
     val source: BiliApiSource,
     val request: VideoRecommendRequest,
     val items: List<VideoCard>,
+    // Cursor to pass to the next page; null for Web (page/fetch_row based) and end of feed.
+    val nextCursor: String? = null,
 )
 
 data class VideoPopularRequest(
@@ -232,6 +239,14 @@ internal class VideoApiSources(
     preferredSource: () -> BiliApiSource,
 ) {
     private val selector = ApiSourceSelector(providers = providers, preferredSource = preferredSource)
+    private val webRecommender =
+        providers.firstOrNull {
+            it.source == BiliApiSource.WEB && it.supports(BiliApiCapability.VIDEO_RECOMMEND)
+        }
+    private val appRecommender =
+        providers.firstOrNull {
+            it.source == BiliApiSource.APP && it.supports(BiliApiCapability.VIDEO_RECOMMEND)
+        }
 
     suspend fun detail(request: VideoDetailRequest): VideoDetail =
         selector.providerFor(BiliApiCapability.VIDEO_DETAIL).detail(request)
@@ -239,8 +254,40 @@ internal class VideoApiSources(
     suspend fun tags(request: VideoTagsRequest): VideoTagsPage =
         selector.providerFor(BiliApiCapability.VIDEO_TAGS).tags(request)
 
-    suspend fun recommend(request: VideoRecommendRequest): VideoRecommendPage =
-        selector.providerFor(BiliApiCapability.VIDEO_RECOMMEND).recommend(request)
+    /**
+     * The Web home feed is the one that supports last_showlist/fetch_row/brush and returns
+     * PC-sized recommendation metadata. Always try it first; the App feed is only a fallback
+     * because it is a short-video cursor feed and has weaker de-duplication support.
+     */
+    suspend fun recommend(request: VideoRecommendRequest): VideoRecommendPage {
+        val web = webRecommender
+        var webFailure: Throwable? = null
+        if (web != null) {
+            try {
+                return web.recommend(request)
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+                webFailure = t
+                AppLog.w("VideoApi", "web recommend failed, trying app fallback", t)
+            }
+        }
+
+        val app = appRecommender
+        if (app != null) {
+            try {
+                return app.recommend(request)
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+                webFailure?.let { t.addSuppressed(it) }
+                throw t
+            }
+        }
+
+        webFailure?.let { throw it }
+        throw ApiSourceUnavailableException(
+            "api_capability_not_implemented capability=${BiliApiCapability.VIDEO_RECOMMEND}",
+        )
+    }
 
     suspend fun popular(request: VideoPopularRequest): VideoCardPage<VideoPopularRequest> =
         selector.providerFor(BiliApiCapability.VIDEO_POPULAR).popular(request)

@@ -68,18 +68,9 @@ private suspend fun <T> runSuspendCatchingNonCancellation(block: suspend () -> T
         Result.failure(throwable)
     }
 
-private fun PlayerActivity.startPlaybackFailureMessage(throwable: Throwable): String {
-    val apiError = throwable as? BiliApiException
-    return when {
-        apiError?.apiCode == -404 -> "当前视频暂时无法播放（接口返回 -404）"
-        !throwable.message.isNullOrBlank() -> "加载播放信息失败：${throwable.message}"
-        else -> "加载播放信息失败：未知错误"
-    }
-}
-
 private fun PlayerActivity.finishAfterStartPlaybackFailure(throwable: Throwable) {
     if (!handlePlayUrlErrorIfNeeded(throwable)) {
-        AppToast.showLong(this, startPlaybackFailureMessage(throwable))
+        AppToast.showLong(this, playbackFailureTip(throwable))
     }
     if (!isFinishing) finish()
 }
@@ -409,7 +400,7 @@ internal fun PlayerActivity.startPlayback(
         playbackUncaughtHandler
             ?: CoroutineExceptionHandler { _, throwable ->
                 AppLog.e("Player", "uncaught", throwable)
-                AppToast.showLong(this@startPlayback, "播放失败：${throwable.message}")
+                AppToast.showLong(this@startPlayback, playbackFailureTip(throwable))
                 finish()
             }
 
@@ -418,6 +409,26 @@ internal fun PlayerActivity.startPlayback(
             val startupJobs = mutableListOf<Job>()
             try {
                 trace?.log("view:start")
+                // Most entry points already know cid, so the playurl request can run at the
+                // same time as the detail request instead of waiting for it.
+                val prefetchedPrimaryJob =
+                    cidExtra?.takeIf { it > 0L }?.let { knownCid ->
+                        val (prefetchQn, prefetchFnval) = playUrlParamsForSession()
+                        async {
+                            runSuspendCatchingNonCancellation {
+                                trace?.log("playurl:prefetch:start", "qn=$prefetchQn fnval=$prefetchFnval")
+                                requestPlayStream(
+                                    bvid = safeBvid,
+                                    aid = safeAid,
+                                    cid = knownCid,
+                                    epId = epIdExtra,
+                                    qn = prefetchQn,
+                                    fnval = prefetchFnval,
+                                    tryLook = false,
+                                ).also { trace?.log("playurl:prefetch:done") }
+                            }
+                        }.also(startupJobs::add)
+                    }
                 val detailJob =
                     async(Dispatchers.IO) {
                         runCatching {
@@ -450,6 +461,7 @@ internal fun PlayerActivity.startPlayback(
                                 }
                             },
                     )
+                    startupJobs.forEach { it.cancel() }
                     finish()
                     return@launch
                 }
@@ -494,6 +506,15 @@ internal fun PlayerActivity.startPlayback(
 
                 requestOnlineWatchingText(bvid = resolvedBvid, cid = cid)
                 applyPerVideoPreferredQn(detail, cid = cid)
+                val prefetchedResult = prefetchedPrimaryJob?.await()
+                val prefetchFailure = prefetchedResult?.exceptionOrNull()
+                if (prefetchFailure is CancellationException) throw prefetchFailure
+                if (prefetchFailure != null) {
+                    trace?.log("playurl:prefetch:failed", "error=${prefetchFailure.message}")
+                }
+                // Only reuse a successful prefetch; a failed one is retried by the normal path so
+                // a transient network error does not turn into an immediate playback failure.
+                val prefetchedPrimary = prefetchedResult?.takeIf { it.isSuccess }
 
                 val playJob =
                     async {
@@ -511,6 +532,7 @@ internal fun PlayerActivity.startPlayback(
                                 qn = qn,
                                 fnval = fnval,
                                 constraints = playbackConstraints,
+                                prefetchedPrimary = prefetchedPrimary,
                             ).also { trace?.log("playurl:done") }
                         }
                     }.also(startupJobs::add)

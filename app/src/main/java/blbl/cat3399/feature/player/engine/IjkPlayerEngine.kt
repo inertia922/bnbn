@@ -566,9 +566,15 @@ internal class IjkPlayerEngine(
         runCatching { p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 0L) }
         runCatching { p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "enable-accurate-seek", 1L) }
         runCatching { p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "seek-at-start", 0L) }
-        // Network flags.
+        // Network / buffer flags. Keep a bounded forward buffer so a slow CDN does not grow
+        // unbounded memory, but leave enough room to ride out short network dips.
+        runCatching { p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-buffer-size", 32L * 1024 * 1024) }
+        runCatching { p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "min-frames", 3L) }
+        runCatching { p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 1L) }
         runCatching { p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1L) }
         runCatching { p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "timeout", 20_000_000L) } // us
+        runCatching { p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 1_500_000L) }
+        runCatching { p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 1_500_000L) }
         // Allow local MPD (`file://`) to reference remote segments (`http(s)://`).
         runCatching {
             p.setOption(

@@ -37,6 +37,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.TimeZone
 
 internal class WebVideoApi(
     private val transport: WebVideoApiTransport = BiliClientWebVideoApiTransport,
@@ -102,7 +103,7 @@ internal class WebVideoApi(
                 "brush" to if (request.isRefresh) "1" else "0",
                 "platform" to "pc",
                 "web_location" to "1430650",
-                "timezone_offset" to "-480",
+                "timezone_offset" to currentTimezoneOffsetMinutes(),
                 "y_num" to "4",
                 "column" to "5",
                 "from_spm_id" to "333.1007",
@@ -547,6 +548,12 @@ internal class WebVideoApi(
             val msg = json.optString("message", json.optString("msg", ""))
             throw BiliApiException(apiCode = code, apiMessage = msg)
         }
+    }
+
+    private fun currentTimezoneOffsetMinutes(): String {
+        // Match the browser's Date#getTimezoneOffset sign: UTC+8 -> -480.
+        val offsetMs = TimeZone.getDefault().getOffset(System.currentTimeMillis())
+        return (-offsetMs / 60_000L).toString()
     }
 
     companion object {
