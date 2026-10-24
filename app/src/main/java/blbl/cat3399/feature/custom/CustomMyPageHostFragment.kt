@@ -58,14 +58,21 @@ class CustomMyPageHostFragment : Fragment(), MyNavigator, BackPressHandler, Refr
             .commit()
     }
 
-    override fun openBangumiDetail(seasonId: Long, isDrama: Boolean, continueEpId: Long?, continueEpIndex: Int?) {
+    override fun openBangumiDetail(
+        seasonId: Long,
+        isDrama: Boolean,
+        continueEpId: Long?,
+        continueEpIndex: Int?,
+        fromFollowList: Boolean,
+    ) {
         if (!isAdded) return
         startActivity(
             Intent(requireContext(), BangumiDetailActivity::class.java)
                 .putExtra(BangumiDetailActivity.EXTRA_SEASON_ID, seasonId)
                 .putExtra(BangumiDetailActivity.EXTRA_IS_DRAMA, isDrama)
                 .apply { continueEpId?.let { putExtra(BangumiDetailActivity.EXTRA_CONTINUE_EP_ID, it) } }
-                .apply { continueEpIndex?.let { putExtra(BangumiDetailActivity.EXTRA_CONTINUE_EP_INDEX, it) } },
+                .apply { continueEpIndex?.let { putExtra(BangumiDetailActivity.EXTRA_CONTINUE_EP_INDEX, it) } }
+                .apply { if (fromFollowList) putExtra(BangumiDetailActivity.EXTRA_SKIP_FOLLOW_STATUS, true) },
         )
     }
 

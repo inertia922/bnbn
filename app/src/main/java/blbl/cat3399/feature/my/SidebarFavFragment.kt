@@ -66,6 +66,7 @@ class SidebarFavFragment : Fragment(), MyNavigator, BackPressHandler, RefreshKey
         isDrama: Boolean,
         continueEpId: Long?,
         continueEpIndex: Int?,
+        fromFollowList: Boolean,
     ) {
     }
 

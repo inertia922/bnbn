@@ -864,24 +864,40 @@ object BiliApi {
         return PagedResult(items = items, page = page, pages = pages, total = total)
     }
 
-    suspend fun bangumiSeasonDetail(seasonId: Long): BangumiSeasonDetail {
+    suspend fun bangumiSeasonDetail(
+        seasonId: Long,
+        skipFollowStatus: Boolean = false,
+    ): BangumiSeasonDetail {
         val safeSeasonId = seasonId.takeIf { it > 0L } ?: error("seasonId required")
         val url =
             BiliClient.withQuery(
                 "https://api.bilibili.com/pgc/view/web/season",
                 mapOf("season_id" to safeSeasonId.toString()),
             )
-        return bangumiSeasonDetailInner(url = url, seasonId = safeSeasonId, epId = null)
+        return bangumiSeasonDetailInner(
+            url = url,
+            seasonId = safeSeasonId,
+            epId = null,
+            skipFollowStatus = skipFollowStatus,
+        )
     }
 
-    suspend fun bangumiSeasonDetailByEpId(epId: Long): BangumiSeasonDetail {
+    suspend fun bangumiSeasonDetailByEpId(
+        epId: Long,
+        skipFollowStatus: Boolean = false,
+    ): BangumiSeasonDetail {
         val safeEpId = epId.takeIf { it > 0L } ?: error("epId required")
         val url =
             BiliClient.withQuery(
                 "https://api.bilibili.com/pgc/view/web/season",
                 mapOf("ep_id" to safeEpId.toString()),
             )
-        return bangumiSeasonDetailInner(url = url, seasonId = null, epId = safeEpId)
+        return bangumiSeasonDetailInner(
+            url = url,
+            seasonId = null,
+            epId = safeEpId,
+            skipFollowStatus = skipFollowStatus,
+        )
     }
 
     suspend fun pgcFollowAdd(seasonId: Long): PgcFollowActionResult {
@@ -960,6 +976,7 @@ object BiliApi {
         url: String,
         seasonId: Long?,
         epId: Long?,
+        skipFollowStatus: Boolean,
     ): BangumiSeasonDetail {
         val json = BiliClient.getJson(url)
         val code = json.optInt("code", 0)
@@ -1076,6 +1093,7 @@ object BiliApi {
         // is safe to use; otherwise ask the dedicated user/status endpoint.
         val isFollowed =
             when {
+                skipFollowStatus -> null
                 !BiliClient.cookies.hasSessData() -> false
                 metadataFollow == true -> true
                 else -> {
@@ -1091,7 +1109,7 @@ object BiliApi {
         AppLog.i(
             TAG,
             "PGC follow state seasonId=$resolvedSeasonId loggedIn=${BiliClient.cookies.hasSessData()} " +
-                "metadata=$metadataFollow final=$isFollowed",
+                "skip=$skipFollowStatus metadata=$metadataFollow final=$isFollowed",
         )
         return BangumiSeasonDetail(
             seasonId = resolvedSeasonId,

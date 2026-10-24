@@ -54,6 +54,7 @@ class MyBangumiFollowFragment : Fragment(), MyTabSwitchFocusTarget, RefreshKeyHa
                         isDrama = type == 2,
                         continueEpId = season.lastEpId,
                         continueEpIndex = season.lastEpIndex,
+                        fromFollowList = true,
                     )
                 }
             }

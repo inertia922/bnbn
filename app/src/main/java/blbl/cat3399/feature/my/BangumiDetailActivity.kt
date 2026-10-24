@@ -55,6 +55,7 @@ class BangumiDetailActivity : BaseActivity() {
     private val seasonIdArg: Long? by lazy { intent.getLongExtra(EXTRA_SEASON_ID, -1L).takeIf { it > 0L } }
     private val epIdArg: Long? by lazy { intent.getLongExtra(EXTRA_EP_ID, -1L).takeIf { it > 0L } }
     private val isDramaArg: Boolean by lazy { intent.getBooleanExtra(EXTRA_IS_DRAMA, false) }
+    private val skipFollowStatusArg: Boolean by lazy { intent.getBooleanExtra(EXTRA_SKIP_FOLLOW_STATUS, false) }
     private val continueEpIdArg: Long? by lazy { intent.getLongExtra(EXTRA_CONTINUE_EP_ID, -1L).takeIf { it > 0L } ?: epIdArg }
     private val continueEpIndexArg: Int? by lazy { intent.getIntExtra(EXTRA_CONTINUE_EP_INDEX, -1).takeIf { it > 0 } }
 
@@ -229,9 +230,15 @@ class BangumiDetailActivity : BaseActivity() {
                     val detail =
                         withContext(Dispatchers.IO) {
                             if (seasonId != null) {
-                                BiliApi.bangumiSeasonDetail(seasonId = seasonId)
+                                BiliApi.bangumiSeasonDetail(
+                                    seasonId = seasonId,
+                                    skipFollowStatus = skipFollowStatusArg,
+                                )
                             } else {
-                                BiliApi.bangumiSeasonDetailByEpId(epId = epId ?: 0L)
+                                BiliApi.bangumiSeasonDetailByEpId(
+                                    epId = epId ?: 0L,
+                                    skipFollowStatus = skipFollowStatusArg,
+                                )
                             }
                         }
                     if (token != requestToken) return@launch
@@ -349,13 +356,17 @@ class BangumiDetailActivity : BaseActivity() {
             primaryButtonText = getString(if (continueEpisode != null) R.string.my_btn_continue else R.string.my_btn_play),
             secondaryButtonText =
                 when {
+                    skipFollowStatusArg -> null
                     followActionJob?.isActive == true -> "处理中…"
                     isFollowed == null && loadJob?.isActive == true -> "查询追番状态中…"
                     isFollowed == null -> "重新获取追番状态"
                     isFollowed == true -> if (isDramaArg) "已追剧" else "已追番"
                     else -> if (isDramaArg) "追剧" else "追番"
                 },
-            secondaryActionEnabled = loadJob?.isActive != true && followActionJob?.isActive != true,
+            secondaryActionEnabled =
+                !skipFollowStatusArg &&
+                    loadJob?.isActive != true &&
+                    followActionJob?.isActive != true,
             showActions = false,
             partsHeaderText = episodesHeader,
             partsCards = displayEpisodeCards,
@@ -397,6 +408,7 @@ class BangumiDetailActivity : BaseActivity() {
     }
 
     private fun onFollowButtonClicked() {
+        if (skipFollowStatusArg) return
         if (followActionJob?.isActive == true) return
         if (loadJob?.isActive == true) return
         if (!BiliClient.cookies.hasSessData()) {
@@ -620,5 +632,6 @@ class BangumiDetailActivity : BaseActivity() {
         const val EXTRA_IS_DRAMA: String = "is_drama"
         const val EXTRA_CONTINUE_EP_ID: String = "continue_ep_id"
         const val EXTRA_CONTINUE_EP_INDEX: String = "continue_ep_index"
+        const val EXTRA_SKIP_FOLLOW_STATUS: String = "skip_follow_status"
     }
 }

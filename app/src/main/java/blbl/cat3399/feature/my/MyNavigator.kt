@@ -10,6 +10,7 @@ interface MyNavigator {
         isDrama: Boolean,
         continueEpId: Long? = null,
         continueEpIndex: Int? = null,
+        fromFollowList: Boolean = false,
     )
 }
 
